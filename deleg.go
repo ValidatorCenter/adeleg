@@ -30,6 +30,7 @@ var (
 	AccAddress    string
 	AccPrivateKey string
 	TimeOut       int64 // Время в мин. обновления статуса
+	MinAmnt       int
 )
 
 func cnvStr2Float(amntTokenStr string) float32 {
@@ -132,8 +133,8 @@ func delegate() {
 
 	fmt.Println("valueBuy=", valueBuy)
 
-	if valueBuy < 2.0 {
-		fmt.Println("Меньше 2MNT")
+	if valueBuy < float32(MinAmnt) {
+		fmt.Printf("Меньше %dMNT",MinAmnt)
 		return
 	}
 
@@ -246,6 +247,11 @@ func main() {
 		TimeOut = 11
 	}
 	TimeOut = int64(_TgTimeUpdate)
+	MinAmnt, err = strconv.Atoi(othMN.Key("MINAMOUNT").String())
+	if err != nil {
+		fmt.Println(err)
+		MinAmnt = 100
+	}
 
 	for { // бесконечный цикл
 		delegate()
