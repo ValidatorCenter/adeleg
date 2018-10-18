@@ -132,9 +132,10 @@ func delegate() {
 	validatorKey := types.Hex2Bytes(strings.TrimLeft(MnPublicKey, "Mp"))
 
 	fmt.Println("valueBuy=", valueBuy)
-
-	if valueBuy < float32(MinAmnt) {
-		fmt.Printf("Меньше %dMNT",MinAmnt)
+	
+	// 1MNT на прозапас
+	if valueBuy < float32(MinAmnt+1) {
+		fmt.Printf("Меньше %dMNT+1",MinAmnt)
 		return
 	}
 
