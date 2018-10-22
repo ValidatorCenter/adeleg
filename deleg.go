@@ -24,10 +24,15 @@ import (
 	"gopkg.in/ini.v1"
 )
 
+const (
+	maxAmntMn = 5 // количество мастернод
+)
+
 var (
 	CoinMinter    string // Основная монета Minter
 	MnAddress     string
-	MnPublicKey   string
+	MnPublicKey   [maxAmntMn]string
+	MnPrc         [maxAmntMn]int
 	AccAddress    string
 	AccPrivateKey string
 	TimeOut       int64 // Время в мин. обновления статуса
@@ -130,89 +135,97 @@ func getBalance(usrAddr string) float32 {
 // делегирование
 func delegate() {
 	valueBuy := getBalance(AccAddress)
-	validatorKey := types.Hex2Bytes(strings.TrimLeft(MnPublicKey, "Mp"))
-
 	fmt.Println("valueBuy=", valueBuy)
-
 	// 1MNT на прозапас
 	if valueBuy < float32(MinAmnt+1) {
 		fmt.Printf("Меньше %dMNT+1", MinAmnt)
 		return
 	}
 
-	privKey, err := crypto.HexToECDSA(AccPrivateKey)
-	if err != nil {
-		panic(err)
-	}
+	fullDelegCoin := float64(valueBuy - 1.0) // 1MNT на комиссию
 
-	var mntV types.CoinSymbol
-	copy(mntV[:], []byte(CoinMinter))
+	for i := 0; i < maxAmntMn; i++ {
+		if MnPublicKey[i] == "" || MnPrc[i] <= 0 {
+			continue
+		}
+		fmt.Printf("###########\n#### %d ####\n###########\n", i+1)
 
-	mng18 := big.NewInt(1000000000000000)         // убрал 000 (3-нуля)
-	mng000 := big.NewFloat(1000)                  // вот тут 000 (3-нуля)
-	amnt := big.NewFloat(float64(valueBuy - 1.0)) // 1MNT на комиссию
-	fmt.Println("amnt=", amnt.String())
-	mnFl := big.NewFloat(0).Mul(amnt, mng000)
-	fmt.Println("mnFl=", mnFl.String())
-	amntInt_000, _ := mnFl.Int64()
-	var amntBInt big.Int
-	amntBInt1 := amntBInt.Mul(big.NewInt(amntInt_000), mng18)
-	fmt.Println("amntBInt1=", amntBInt1.String())
+		validatorKey := types.Hex2Bytes(strings.TrimLeft(MnPublicKey[i], "Mp"))
 
-	buyC := tr.DelegateData{}
-	buyC.PubKey = validatorKey
-	buyC.Coin = mntV
-	buyC.Stake = amntBInt1
+		privKey, err := crypto.HexToECDSA(AccPrivateKey)
+		if err != nil {
+			panic(err)
+		}
 
-	trn := tr.Transaction{}
-	trn.Type = tr.TypeDelegate // делегирование
-	trn.Data, _ = rlp.EncodeToBytes(buyC)
-	trn.Nonce = uint64(getNonce(AccAddress) + 1)
-	trn.GasCoin = mntV
-	trn.SignatureType = tr.SigTypeSingle
+		var mntV types.CoinSymbol
+		copy(mntV[:], []byte(CoinMinter))
 
-	err = trn.Sign(privKey)
-	if err != nil {
-		panic(err)
-	}
+		mng18 := big.NewInt(1000000000000000)                         // убрал 000 (3-нуля)
+		mng000 := big.NewFloat(1000)                                  // вот тут 000 (3-нуля)
+		amnt := big.NewFloat(fullDelegCoin * float64(MnPrc[i]) / 100) // в процентном соотношение
+		fmt.Println("amnt=", amnt.String())
+		mnFl := big.NewFloat(0).Mul(amnt, mng000)
+		fmt.Println("mnFl=", mnFl.String())
+		amntInt_000, _ := mnFl.Int64()
+		var amntBInt big.Int
+		amntBInt1 := amntBInt.Mul(big.NewInt(amntInt_000), mng18)
+		fmt.Println("amntBInt1=", amntBInt1.String())
 
-	bts, err := trn.Serialize()
-	if err != nil {
-		panic(err)
-	}
-	str := hex.EncodeToString(bts)
+		buyC := tr.DelegateData{}
+		buyC.PubKey = validatorKey
+		buyC.Coin = mntV
+		buyC.Stake = amntBInt1
 
-	message := map[string]interface{}{
-		"transaction": str,
-	}
-	bytesRepresentation, err := json.Marshal(message)
-	if err != nil {
-		panic(err)
-	}
+		trn := tr.Transaction{}
+		trn.Type = tr.TypeDelegate // делегирование
+		trn.Data, _ = rlp.EncodeToBytes(buyC)
+		trn.Nonce = uint64(getNonce(AccAddress) + 1)
+		trn.GasCoin = mntV
+		trn.SignatureType = tr.SigTypeSingle
 
-	fmt.Println("TRANSACTION:", bytes.NewBuffer(bytesRepresentation))
+		err = trn.Sign(privKey)
+		if err != nil {
+			panic(err)
+		}
 
-	urlTx := fmt.Sprintf("%s/api/sendTransaction", MnAddress)
-	resp, err := http.Post(urlTx, "application/json", bytes.NewBuffer(bytesRepresentation))
+		bts, err := trn.Serialize()
+		if err != nil {
+			panic(err)
+		}
+		str := hex.EncodeToString(bts)
 
-	if err != nil {
-		panic(err)
-	}
-	defer resp.Body.Close()
-	fmt.Printf("RESP: %#v\n", resp)
+		message := map[string]interface{}{
+			"transaction": str,
+		}
+		bytesRepresentation, err := json.Marshal(message)
+		if err != nil {
+			panic(err)
+		}
 
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		panic(err)
-	}
+		fmt.Println("TRANSACTION:", bytes.NewBuffer(bytesRepresentation))
 
-	var data send_transaction
-	json.Unmarshal(body, &data)
+		urlTx := fmt.Sprintf("%s/api/sendTransaction", MnAddress)
+		resp, err := http.Post(urlTx, "application/json", bytes.NewBuffer(bytesRepresentation))
 
-	if data.Code == 0 {
-		fmt.Println("HASH:", data.Result.Hash)
-	} else {
-		fmt.Println("ERROR:", data.Code, data.Log)
+		if err != nil {
+			panic(err)
+		}
+		defer resp.Body.Close()
+		fmt.Printf("RESP: %#v\n", resp)
+
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			panic(err)
+		}
+
+		var data send_transaction
+		json.Unmarshal(body, &data)
+
+		if data.Code == 0 {
+			fmt.Println("HASH:", data.Result.Hash)
+		} else {
+			fmt.Println("ERROR:", data.Code, data.Log)
+		}
 	}
 }
 
@@ -237,7 +250,15 @@ func main() {
 
 	secMN := cfg.Section("masternode")
 	MnAddress = secMN.Key("ADDRESS").String()
-	MnPublicKey = secMN.Key("PUBLICKEY").String()
+	for i := 0; i < maxAmntMn; i++ {
+		MnPublicKey[i] = secMN.Key(fmt.Sprintf("PUBLICKEY_%d", (i + 1))).String()
+		iAmntPrc, err := strconv.Atoi(secMN.Key(fmt.Sprintf("PRC_%d", (i + 1))).String())
+		if err != nil {
+			fmt.Println(err)
+			iAmntPrc = 0
+		}
+		MnPrc[i] = iAmntPrc
+	}
 
 	accMN := cfg.Section("account")
 	AccAddress = accMN.Key("ADDRESS").String()       // Адрес аккаунта
