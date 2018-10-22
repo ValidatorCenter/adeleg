@@ -25,6 +25,7 @@ import (
 )
 
 var (
+	CoinMinter    string // Основная монета Minter
 	MnAddress     string
 	MnPublicKey   string
 	AccAddress    string
@@ -123,7 +124,7 @@ func getBalance(usrAddr string) float32 {
 	var data blnc_usr
 	json.Unmarshal(body, &data)
 
-	return cnvStr2Float_18(data.Result.Balance["MNT"])
+	return cnvStr2Float_18(data.Result.Balance[CoinMinter])
 }
 
 // делегирование
@@ -132,10 +133,10 @@ func delegate() {
 	validatorKey := types.Hex2Bytes(strings.TrimLeft(MnPublicKey, "Mp"))
 
 	fmt.Println("valueBuy=", valueBuy)
-	
+
 	// 1MNT на прозапас
 	if valueBuy < float32(MinAmnt+1) {
-		fmt.Printf("Меньше %dMNT+1",MinAmnt)
+		fmt.Printf("Меньше %dMNT+1", MinAmnt)
 		return
 	}
 
@@ -145,7 +146,7 @@ func delegate() {
 	}
 
 	var mntV types.CoinSymbol
-	copy(mntV[:], []byte("MNT"))
+	copy(mntV[:], []byte(CoinMinter))
 
 	mng18 := big.NewInt(1000000000000000)         // убрал 000 (3-нуля)
 	mng000 := big.NewFloat(1000)                  // вот тут 000 (3-нуля)
@@ -191,7 +192,8 @@ func delegate() {
 
 	fmt.Println("TRANSACTION:", bytes.NewBuffer(bytesRepresentation))
 
-	resp, err := http.Post("https://minter-node-1.testnet.minter.network/api/sendTransaction", "application/json", bytes.NewBuffer(bytesRepresentation))
+	urlTx := fmt.Sprintf("%s/api/sendTransaction", MnAddress)
+	resp, err := http.Post(urlTx, "application/json", bytes.NewBuffer(bytesRepresentation))
 
 	if err != nil {
 		panic(err)
@@ -240,6 +242,9 @@ func main() {
 	accMN := cfg.Section("account")
 	AccAddress = accMN.Key("ADDRESS").String()       // Адрес аккаунта
 	AccPrivateKey = accMN.Key("PRIVATEKEY").String() // приватный ключ аккаунта
+
+	netMN := cfg.Section("network")
+	CoinMinter = netMN.Key("COINNET").String()
 
 	othMN := cfg.Section("other")
 	_TgTimeUpdate, err := strconv.Atoi(othMN.Key("TIMEOUT").String())
