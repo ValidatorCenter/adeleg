@@ -1,14 +1,15 @@
 package main
 
 import (
-	"bytes"
+	/*"bytes"
 	"encoding/json"
+	*/
+
+	"fmt"
 	"os"
 	"time"
 
-	//"errors"
-	"fmt"
-	"io/ioutil"
+	/*"io/ioutil"
 	"math/big"
 	"net/http"
 	"strconv"
@@ -21,24 +22,47 @@ import (
 	"github.com/MinterTeam/minter-go-node/crypto"
 	"github.com/MinterTeam/minter-go-node/rlp"
 
-	"gopkg.in/ini.v1"
+	"gopkg.in/ini.v1"*/
+
+	"github.com/BurntSushi/toml"
+	m "github.com/ValidatorCenter/minter-go-sdk"
 )
 
-const (
+/*const (
 	maxAmntMn = 5 // количество мастернод
-)
+)*/
 
 var (
-	CoinMinter    string // Основная монета Minter
-	MnAddress     string
-	MnPublicKey   [maxAmntMn]string
-	MnPrc         [maxAmntMn]int
-	AccAddress    string
-	AccPrivateKey string
-	TimeOut       int64 // Время в мин. обновления статуса
-	MinAmnt       int
+	/*
+		CoinMinter    string // Основная монета Minter
+		MnAddress     string
+		MnPublicKey   [maxAmntMn]string
+		MnPrc         [maxAmntMn]int
+		AccAddress    string
+		AccPrivateKey string
+		TimeOut       int64 // Время в мин. обновления статуса
+		MinAmnt       int
+	*/
+	conf  Config
+	sdk   []m.SDK
+	nodes []NodeData
 )
 
+type Config struct {
+	Address   string          `toml:"address"`
+	Nodes     [][]interface{} `toml:"nodes"`
+	Accounts  [][]interface{} `toml:"accounts"`
+	CoinNet   string          `toml:"coin_net"`
+	Timeout   int             `toml:"timeout"`
+	MinAmount int             `toml:"min_amount"`
+}
+
+type NodeData struct {
+	PubKey string
+	Prc    int
+}
+
+/*
 func cnvStr2Float(amntTokenStr string) float32 {
 	var fAmntToken float32 = 0.0
 	if amntTokenStr != "" {
@@ -131,20 +155,24 @@ func getBalance(usrAddr string) float32 {
 
 	return cnvStr2Float_18(data.Result.Balance[CoinMinter])
 }
-
+*/
 // делегирование
 func delegate() {
-	valueBuy := getBalance(AccAddress)
-	fmt.Println("valueBuy=", valueBuy)
-	// 1MNT на прозапас
-	if valueBuy < float32(MinAmnt+1) {
-		fmt.Printf("Меньше %dMNT+1", MinAmnt)
-		return
+	for _, acc1 := range sdk {
+		valueBuy := acc1.GetBalance()
+		fmt.Println("valueBuy=", valueBuy)
+		// 1bip на прозапас
+		if valueBuy < float32(conf.MinAmnt+1) {
+			fmt.Printf("Меньше %d%s+1", conf.MinAmnt, conf.CoinNet)
+			return
+		}
+		//fullDelegCoin := float64(valueBuy - 1.0) // 1MNT на комиссию
+
+		// Цикл делегирования
+
 	}
 
-	fullDelegCoin := float64(valueBuy - 1.0) // 1MNT на комиссию
-
-	for i := 0; i < maxAmntMn; i++ {
+	/*for i := 0; i < maxAmntMn; i++ {
 		if MnPublicKey[i] == "" || MnPrc[i] <= 0 {
 			continue
 		}
@@ -226,63 +254,49 @@ func delegate() {
 		} else {
 			fmt.Println("ERROR:", data.Code, data.Log)
 		}
-	}
+	}*/
 }
 
 func main() {
-	var err error
-	ConfFileName := "adlg.ini"
+	//var err error
+	ConfFileName := "adlg.toml"
 
 	// проверяем есть ли входной параметр/аргумент
 	if len(os.Args) == 2 {
 		ConfFileName = os.Args[1]
 	}
-	fmt.Printf("INI=%s\n", ConfFileName)
+	fmt.Printf("TOML=%s\n", ConfFileName)
 
-	// INI
-	cfg, err := ini.LoadSources(ini.LoadOptions{IgnoreInlineComment: true}, ConfFileName)
-	if err != nil {
-		fmt.Println("Ошибка загрузки INI файла:", err.Error())
+	if _, err := toml.DecodeFile(ConfFileName, &conf); err != nil {
+		fmt.Println("Ошибка загрузки toml файла:", err.Error())
 		return
 	} else {
-		fmt.Println("...данные с INI файла = загружены!")
+		fmt.Println("...данные с toml файла = загружены!")
 	}
 
-	secMN := cfg.Section("masternode")
-	MnAddress = secMN.Key("ADDRESS").String()
-	for i := 0; i < maxAmntMn; i++ {
-		MnPublicKey[i] = secMN.Key(fmt.Sprintf("PUBLICKEY_%d", (i + 1))).String()
-		iAmntPrc, err := strconv.Atoi(secMN.Key(fmt.Sprintf("PRC_%d", (i + 1))).String())
-		if err != nil {
-			fmt.Println(err)
-			iAmntPrc = 0
+	fmt.Printf("%#v", conf)
+	for _, d := range conf.Accounts {
+		fmt.Println(d)
+		sdk1 := m.SDK{
+			MnAddress:     conf.Address,
+			AccAddress:    d[0],
+			AccPrivateKey: d[1],
 		}
-		MnPrc[i] = iAmntPrc
+		sdk = append(sdk, sdk1)
 	}
 
-	accMN := cfg.Section("account")
-	AccAddress = accMN.Key("ADDRESS").String()       // Адрес аккаунта
-	AccPrivateKey = accMN.Key("PRIVATEKEY").String() // приватный ключ аккаунта
-
-	netMN := cfg.Section("network")
-	CoinMinter = netMN.Key("COINNET").String()
-
-	othMN := cfg.Section("other")
-	_TgTimeUpdate, err := strconv.Atoi(othMN.Key("TIMEOUT").String())
-	if err != nil {
-		fmt.Println(err)
-		TimeOut = 11
-	}
-	TimeOut = int64(_TgTimeUpdate)
-	MinAmnt, err = strconv.Atoi(othMN.Key("MINAMOUNT").String())
-	if err != nil {
-		fmt.Println(err)
-		MinAmnt = 100
+	for _, d := range conf.Nodes {
+		fmt.Println(d)
+		n1 := NodeData{
+			PubKey: d[0],
+			Prc:    d[1],
+		}
+		nodes = append(nodes, n1)
 	}
 
 	for { // бесконечный цикл
-		delegate()
-		fmt.Printf("Пауза %dмин.... в этот момент лучше прерывать\n", TimeOut)
-		time.Sleep(time.Minute * time.Duration(TimeOut)) // пауза ~TimeOut~ мин
+		//delegate()
+		fmt.Printf("Пауза %dмин.... в этот момент лучше прерывать\n", conf.Timeout)
+		time.Sleep(time.Minute * time.Duration(conf.Timeout)) // пауза ~TimeOut~ мин
 	}
 }
