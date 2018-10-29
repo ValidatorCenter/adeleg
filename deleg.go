@@ -1,55 +1,36 @@
 package main
 
 import (
-	"bytes"
-	"encoding/json"
+	"fmt"
 	"os"
 	"time"
 
-	//"errors"
-	"fmt"
-	"io/ioutil"
-	"math/big"
-	"net/http"
 	"strconv"
-	"strings"
 
-	"encoding/hex"
-
-	tr "github.com/MinterTeam/minter-go-node/core/transaction"
-	"github.com/MinterTeam/minter-go-node/core/types"
-	"github.com/MinterTeam/minter-go-node/crypto"
-	"github.com/MinterTeam/minter-go-node/rlp"
-
-	"gopkg.in/ini.v1"
-)
-
-const (
-	maxAmntMn = 5 // количество мастернод
+	"github.com/BurntSushi/toml"
+	m "github.com/ValidatorCenter/minter-go-sdk"
 )
 
 var (
-	CoinMinter    string // Основная монета Minter
-	MnAddress     string
-	MnPublicKey   [maxAmntMn]string
-	MnPrc         [maxAmntMn]int
-	AccAddress    string
-	AccPrivateKey string
-	TimeOut       int64 // Время в мин. обновления статуса
-	MinAmnt       int
+	conf  Config
+	sdk   []m.SDK
+	nodes []NodeData
 )
 
-func cnvStr2Float(amntTokenStr string) float32 {
-	var fAmntToken float32 = 0.0
-	if amntTokenStr != "" {
-		fAmntToken64, err := strconv.ParseFloat(amntTokenStr, 64)
-		if err != nil {
-			panic(err.Error())
-		}
-		fAmntToken = float32(fAmntToken64)
-	}
-	return fAmntToken
+type Config struct {
+	Address   string          `toml:"address"`
+	Nodes     [][]interface{} `toml:"nodes"`
+	Accounts  [][]interface{} `toml:"accounts"`
+	CoinNet   string          `toml:"coin_net"`
+	Timeout   int             `toml:"timeout"`
+	MinAmount int             `toml:"min_amount"`
 }
+
+type NodeData struct {
+	PubKey string
+	Prc    int
+}
+
 func cnvStr2Float_18(amntTokenStr string) float32 {
 	var fAmntToken float32 = 0.0
 	if amntTokenStr != "" {
@@ -62,227 +43,118 @@ func cnvStr2Float_18(amntTokenStr string) float32 {
 	return fAmntToken
 }
 
-// Результат выполнения транзакции
-type send_transaction struct {
-	Code   int               `json:"code"`
-	Result TransSendResponse `json:"result"`
-	Log    string            `json:"log"`
-}
-
-// Хэш транзакции
-type TransSendResponse struct {
-	Hash string `json:"hash"`
-}
-
-// Результат выполнения получения номера операции
-type count_transaction struct {
-	Code   int                `json:"code"`
-	Result TransCountResponse `json:"result"`
-}
-type TransCountResponse struct {
-	Count int `json:"count"`
-}
-
-// Возвращает количество исходящих транзакций с данной учетной записи. Это нужно использовать для расчета nonce для новой транзакции.
-func getNonce(txAddress string) int {
-	url := fmt.Sprintf("%s/api/transactionCount/%s", MnAddress, txAddress)
-	res, err := http.Get(url)
-	if err != nil {
-		panic(err.Error())
-	}
-	defer res.Body.Close()
-
-	body, err := ioutil.ReadAll(res.Body)
-	if err != nil {
-		panic(err.Error())
-	}
-
-	var data count_transaction
-	json.Unmarshal(body, &data)
-	return data.Result.Count
-}
-
-type blnc_usr struct {
-	Code   int           `json:"code"`
-	Result BlnctResponse `json:"result"`
-}
-type BlnctResponse struct {
-	Balance map[string]string `json:"balance"`
-}
-
-// узнаем баланс
-func getBalance(usrAddr string) float32 {
-	url := fmt.Sprintf("%s/api/balance/%s", MnAddress, usrAddr)
-	res, err := http.Get(url)
-	if err != nil {
-		fmt.Println("ОШИБКА:", err.Error())
-		return -1.0
-	}
-	defer res.Body.Close()
-
-	body, err := ioutil.ReadAll(res.Body)
-	if err != nil {
-		fmt.Println("ОШИБКА:", err.Error())
-		return -1.0
-	}
-
-	var data blnc_usr
-	json.Unmarshal(body, &data)
-
-	return cnvStr2Float_18(data.Result.Balance[CoinMinter])
+func getMinString(bigStr string) string {
+	return fmt.Sprintf("%s...%s", bigStr[:6], bigStr[len(bigStr)-4:len(bigStr)])
 }
 
 // делегирование
 func delegate() {
-	valueBuy := getBalance(AccAddress)
-	fmt.Println("valueBuy=", valueBuy)
-	// 1MNT на прозапас
-	if valueBuy < float32(MinAmnt+1) {
-		fmt.Printf("Меньше %dMNT+1", MinAmnt)
-		return
-	}
-
-	fullDelegCoin := float64(valueBuy - 1.0) // 1MNT на комиссию
-
-	for i := 0; i < maxAmntMn; i++ {
-		if MnPublicKey[i] == "" || MnPrc[i] <= 0 {
-			continue
+	for iS, _ := range sdk {
+		var valueBuy map[string]string
+		valueBuy = sdk[iS].GetBalance(sdk[iS].AccAddress)
+		valueBuy_f32 := cnvStr2Float_18(valueBuy[conf.CoinNet])
+		fmt.Println("#################################")
+		fmt.Println("DELEGATE: ", valueBuy_f32)
+		// 1bip на прозапас
+		if valueBuy_f32 < float32(conf.MinAmount+1) {
+			fmt.Printf("ERROR: Less than %d%s+1\n", conf.MinAmount, conf.CoinNet)
+			continue // переходим к другой учетной записи
 		}
-		fmt.Printf("###########\n#### %d ####\n###########\n", i+1)
+		fullDelegCoin := float64(valueBuy_f32 - 1.0) // 1MNT на комиссию
 
-		validatorKey := types.Hex2Bytes(strings.TrimLeft(MnPublicKey[i], "Mp"))
+		// Цикл делегирования
+		for i, _ := range nodes {
 
-		privKey, err := crypto.HexToECDSA(AccPrivateKey)
-		if err != nil {
-			panic(err)
-		}
+			amnt_f64 := fullDelegCoin * float64(nodes[i].Prc) / 100 // в процентном соотношение
 
-		var mntV types.CoinSymbol
-		copy(mntV[:], []byte(CoinMinter))
+			delegDt := m.TxDelegateData{
+				Coin:     conf.CoinNet,
+				PubKey:   nodes[i].PubKey,
+				Stake:    int64(amnt_f64),
+				GasCoin:  conf.CoinNet,
+				GasPrice: 1,
+			}
 
-		mng18 := big.NewInt(1000000000000000)                         // убрал 000 (3-нуля)
-		mng000 := big.NewFloat(1000)                                  // вот тут 000 (3-нуля)
-		amnt := big.NewFloat(fullDelegCoin * float64(MnPrc[i]) / 100) // в процентном соотношение
-		fmt.Println("amnt=", amnt.String())
-		mnFl := big.NewFloat(0).Mul(amnt, mng000)
-		fmt.Println("mnFl=", mnFl.String())
-		amntInt_000, _ := mnFl.Int64()
-		var amntBInt big.Int
-		amntBInt1 := amntBInt.Mul(big.NewInt(amntInt_000), mng18)
-		fmt.Println("amntBInt1=", amntBInt1.String())
+			fmt.Println("TX: ", getMinString(sdk[iS].AccAddress), fmt.Sprintf("%d%%", nodes[i].Prc), "=>", getMinString(nodes[i].PubKey), "=", int64(amnt_f64), conf.CoinNet)
 
-		buyC := tr.DelegateData{}
-		buyC.PubKey = validatorKey
-		buyC.Coin = mntV
-		buyC.Stake = amntBInt1
-
-		trn := tr.Transaction{}
-		trn.Type = tr.TypeDelegate // делегирование
-		trn.Data, _ = rlp.EncodeToBytes(buyC)
-		trn.Nonce = uint64(getNonce(AccAddress) + 1)
-		trn.GasCoin = mntV
-		trn.SignatureType = tr.SigTypeSingle
-
-		err = trn.Sign(privKey)
-		if err != nil {
-			panic(err)
-		}
-
-		bts, err := trn.Serialize()
-		if err != nil {
-			panic(err)
-		}
-		str := hex.EncodeToString(bts)
-
-		message := map[string]interface{}{
-			"transaction": str,
-		}
-		bytesRepresentation, err := json.Marshal(message)
-		if err != nil {
-			panic(err)
-		}
-
-		fmt.Println("TRANSACTION:", bytes.NewBuffer(bytesRepresentation))
-
-		urlTx := fmt.Sprintf("%s/api/sendTransaction", MnAddress)
-		resp, err := http.Post(urlTx, "application/json", bytes.NewBuffer(bytesRepresentation))
-
-		if err != nil {
-			panic(err)
-		}
-		defer resp.Body.Close()
-		fmt.Printf("RESP: %#v\n", resp)
-
-		body, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			panic(err)
-		}
-
-		var data send_transaction
-		json.Unmarshal(body, &data)
-
-		if data.Code == 0 {
-			fmt.Println("HASH:", data.Result.Hash)
-		} else {
-			fmt.Println("ERROR:", data.Code, data.Log)
+			resHash, err := sdk[iS].TxDelegate(&delegDt)
+			if err != nil {
+				fmt.Println("ERROR:", err.Error())
+			} else {
+				fmt.Println("HASH TX:", resHash)
+			}
 		}
 	}
 }
 
 func main() {
-	var err error
-	ConfFileName := "adlg.ini"
+	ConfFileName := "adlg.toml"
 
 	// проверяем есть ли входной параметр/аргумент
 	if len(os.Args) == 2 {
 		ConfFileName = os.Args[1]
 	}
-	fmt.Printf("INI=%s\n", ConfFileName)
+	fmt.Printf("TOML=%s\n", ConfFileName)
 
-	// INI
-	cfg, err := ini.LoadSources(ini.LoadOptions{IgnoreInlineComment: true}, ConfFileName)
-	if err != nil {
-		fmt.Println("Ошибка загрузки INI файла:", err.Error())
+	if _, err := toml.DecodeFile(ConfFileName, &conf); err != nil {
+		fmt.Println("ERROR: loading toml file:", err.Error())
 		return
 	} else {
-		fmt.Println("...данные с INI файла = загружены!")
+		fmt.Println("...data from toml file = loaded!")
 	}
 
-	secMN := cfg.Section("masternode")
-	MnAddress = secMN.Key("ADDRESS").String()
-	for i := 0; i < maxAmntMn; i++ {
-		MnPublicKey[i] = secMN.Key(fmt.Sprintf("PUBLICKEY_%d", (i + 1))).String()
-		iAmntPrc, err := strconv.Atoi(secMN.Key(fmt.Sprintf("PRC_%d", (i + 1))).String())
-		if err != nil {
-			fmt.Println(err)
-			iAmntPrc = 0
+	for _, d := range conf.Accounts {
+		str0 := ""
+		str1 := ""
+		ok := true
+
+		if str0, ok = d[0].(string); !ok {
+			fmt.Println("ERROR: loading toml file:", d[0], "not wallet address")
+			return
 		}
-		MnPrc[i] = iAmntPrc
+		if str1, ok = d[1].(string); !ok {
+			fmt.Println("ERROR: loading toml file:", d[1], "not private wallet key")
+			return
+		}
+
+		sdk1 := m.SDK{
+			MnAddress:     conf.Address,
+			AccAddress:    str0,
+			AccPrivateKey: str1,
+		}
+		sdk = append(sdk, sdk1)
 	}
 
-	accMN := cfg.Section("account")
-	AccAddress = accMN.Key("ADDRESS").String()       // Адрес аккаунта
-	AccPrivateKey = accMN.Key("PRIVATEKEY").String() // приватный ключ аккаунта
+	for _, d := range conf.Nodes {
+		str0 := ""
+		str1 := ""
+		ok := true
 
-	netMN := cfg.Section("network")
-	CoinMinter = netMN.Key("COINNET").String()
+		if str0, ok = d[0].(string); !ok {
+			fmt.Println("ERROR: loading toml file:", d[0], "not a masternode public key")
+			return
+		}
+		if str1, ok = d[1].(string); !ok {
+			fmt.Println("ERROR: loading toml file:", d[1], "not a number")
+			return
+		}
 
-	othMN := cfg.Section("other")
-	_TgTimeUpdate, err := strconv.Atoi(othMN.Key("TIMEOUT").String())
-	if err != nil {
-		fmt.Println(err)
-		TimeOut = 11
-	}
-	TimeOut = int64(_TgTimeUpdate)
-	MinAmnt, err = strconv.Atoi(othMN.Key("MINAMOUNT").String())
-	if err != nil {
-		fmt.Println(err)
-		MinAmnt = 100
+		int1, err := strconv.Atoi(str1)
+		if err != nil {
+			fmt.Println("ERROR: loading toml file:", str1, "not a number")
+			return
+		}
+
+		n1 := NodeData{
+			PubKey: str0,
+			Prc:    int1,
+		}
+		nodes = append(nodes, n1)
 	}
 
 	for { // бесконечный цикл
 		delegate()
-		fmt.Printf("Пауза %dмин.... в этот момент лучше прерывать\n", TimeOut)
-		time.Sleep(time.Minute * time.Duration(TimeOut)) // пауза ~TimeOut~ мин
+		fmt.Printf("Pause %dmin .... at this moment it is better to interrupt\n", conf.Timeout)
+		time.Sleep(time.Minute * time.Duration(conf.Timeout)) // пауза ~TimeOut~ мин
 	}
 }
