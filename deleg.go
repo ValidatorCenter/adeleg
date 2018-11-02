@@ -2,7 +2,9 @@ package main
 
 import (
 	"fmt"
+	"math"
 	"os"
+	"strings"
 	"time"
 
 	"strconv"
@@ -29,6 +31,7 @@ type Config struct {
 type NodeData struct {
 	PubKey string
 	Prc    int
+	Coin   string
 }
 
 func cnvStr2Float_18(amntTokenStr string) float32 {
@@ -64,24 +67,76 @@ func delegate() {
 
 		// Цикл делегирования
 		for i, _ := range nodes {
+			if nodes[i].Coin == "" || nodes[i].Coin == conf.CoinNet {
+				// Страндартная монета BIP(MNT)
+				amnt_f64 := fullDelegCoin * float64(nodes[i].Prc) / 100 // в процентном соотношение
 
-			amnt_f64 := fullDelegCoin * float64(nodes[i].Prc) / 100 // в процентном соотношение
+				delegDt := m.TxDelegateData{
+					Coin:     conf.CoinNet,
+					PubKey:   nodes[i].PubKey,
+					Stake:    int64(amnt_f64),
+					GasCoin:  conf.CoinNet,
+					GasPrice: 1,
+				}
 
-			delegDt := m.TxDelegateData{
-				Coin:     conf.CoinNet,
-				PubKey:   nodes[i].PubKey,
-				Stake:    int64(amnt_f64),
-				GasCoin:  conf.CoinNet,
-				GasPrice: 1,
-			}
+				fmt.Println("TX: ", getMinString(sdk[iS].AccAddress), fmt.Sprintf("%d%%", nodes[i].Prc), "=>", getMinString(nodes[i].PubKey), "=", int64(amnt_f64), conf.CoinNet)
 
-			fmt.Println("TX: ", getMinString(sdk[iS].AccAddress), fmt.Sprintf("%d%%", nodes[i].Prc), "=>", getMinString(nodes[i].PubKey), "=", int64(amnt_f64), conf.CoinNet)
-
-			resHash, err := sdk[iS].TxDelegate(&delegDt)
-			if err != nil {
-				fmt.Println("ERROR:", err.Error())
+				resHash, err := sdk[iS].TxDelegate(&delegDt)
+				if err != nil {
+					fmt.Println("ERROR:", err.Error())
+				} else {
+					fmt.Println("HASH TX:", resHash)
+				}
 			} else {
-				fmt.Println("HASH TX:", resHash)
+				// Кастомная
+				amnt_f64 := fullDelegCoin * float64(nodes[i].Prc) / 100 // в процентном соотношение на какую сумму берём кастомных монет
+				amnt_i64 := int64(math.Floor(amnt_f64))                 // в меньшую сторону
+				if amnt_i64 <= 0 {
+					fmt.Println("ERROR: Value to Sell =0")
+					continue // переходим к другой записи мастернод
+				}
+
+				sellDt := m.TxSellCoinData{
+					CoinToBuy:   nodes[i].Coin,
+					CoinToSell:  conf.CoinNet,
+					ValueToSell: amnt_i64,
+					GasCoin:     conf.CoinNet,
+					GasPrice:    1,
+				}
+				fmt.Println("TX: ", getMinString(sdk[iS].AccAddress), fmt.Sprintf("%d%s", int64(amnt_f64), conf.CoinNet), "=>", nodes[i].Coin)
+				resHash, err := sdk[iS].TxSellCoin(&sellDt)
+				if err != nil {
+					fmt.Println("ERROR:", err.Error())
+					continue // переходим к другой записи мастернод
+				} else {
+					fmt.Println("HASH TX:", resHash)
+				}
+
+				var valDeleg2 map[string]string
+				valDeleg2 = sdk[iS].GetBalance(sdk[iS].AccAddress)
+				valDeleg2_f32 := cnvStr2Float_18(valDeleg2[nodes[i].Coin])
+				valDeleg2_i64 := int64(math.Floor(float64(valDeleg2_f32))) // в меньшую сторону
+				if valDeleg2_i64 <= 0 {
+					fmt.Println("ERROR: Delegate =0")
+					continue // переходим к другой записи мастернод
+				}
+
+				delegDt := m.TxDelegateData{
+					Coin:     nodes[i].Coin,
+					PubKey:   nodes[i].PubKey,
+					Stake:    valDeleg2_i64,
+					GasCoin:  conf.CoinNet,
+					GasPrice: 1,
+				}
+
+				fmt.Println("TX: ", getMinString(sdk[iS].AccAddress), fmt.Sprintf("%d%%", nodes[i].Prc), "=>", getMinString(nodes[i].PubKey), "=", valDeleg2_i64, nodes[i].Coin)
+
+				resHash2, err := sdk[iS].TxDelegate(&delegDt)
+				if err != nil {
+					fmt.Println("ERROR:", err.Error())
+				} else {
+					fmt.Println("HASH TX:", resHash2)
+				}
 			}
 		}
 	}
@@ -128,6 +183,7 @@ func main() {
 	for _, d := range conf.Nodes {
 		str0 := ""
 		str1 := ""
+		coinX := ""
 		ok := true
 
 		if str0, ok = d[0].(string); !ok {
@@ -139,6 +195,14 @@ func main() {
 			return
 		}
 
+		if len(d) == 3 {
+			if coinX, ok = d[2].(string); !ok {
+				fmt.Println("ERROR: loading toml file:", d[2], "not a coin")
+				return
+			}
+			coinX = strings.ToUpper(coinX)
+		}
+
 		int1, err := strconv.Atoi(str1)
 		if err != nil {
 			fmt.Println("ERROR: loading toml file:", str1, "not a number")
@@ -148,8 +212,11 @@ func main() {
 		n1 := NodeData{
 			PubKey: str0,
 			Prc:    int1,
+			Coin:   coinX,
 		}
 		nodes = append(nodes, n1)
+
+		//fmt.Printf("%#v\n", n1)
 	}
 
 	for { // бесконечный цикл
