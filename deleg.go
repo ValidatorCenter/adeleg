@@ -34,18 +34,6 @@ type NodeData struct {
 	Coin   string
 }
 
-func cnvStr2Float_18(amntTokenStr string) float32 {
-	var fAmntToken float32 = 0.0
-	if amntTokenStr != "" {
-		fAmntToken64, err := strconv.ParseFloat(amntTokenStr, 64)
-		if err != nil {
-			panic(err.Error())
-		}
-		fAmntToken = float32(fAmntToken64 / 1000000000000000000)
-	}
-	return fAmntToken
-}
-
 func getMinString(bigStr string) string {
 	return fmt.Sprintf("%s...%s", bigStr[:6], bigStr[len(bigStr)-4:len(bigStr)])
 }
@@ -53,9 +41,9 @@ func getMinString(bigStr string) string {
 // делегирование
 func delegate() {
 	for iS, _ := range sdk {
-		var valueBuy map[string]string
+		var valueBuy map[string]float32
 		valueBuy = sdk[iS].GetBalance(sdk[iS].AccAddress)
-		valueBuy_f32 := cnvStr2Float_18(valueBuy[conf.CoinNet])
+		valueBuy_f32 := valueBuy[conf.CoinNet]
 		fmt.Println("#################################")
 		fmt.Println("DELEGATE: ", valueBuy_f32)
 		// 1bip на прозапас
@@ -74,7 +62,7 @@ func delegate() {
 				delegDt := m.TxDelegateData{
 					Coin:     conf.CoinNet,
 					PubKey:   nodes[i].PubKey,
-					Stake:    int64(amnt_f64),
+					Stake:    float32(amnt_f64),
 					GasCoin:  conf.CoinNet,
 					GasPrice: 1,
 				}
@@ -90,7 +78,7 @@ func delegate() {
 			} else {
 				// Кастомная
 				amnt_f64 := fullDelegCoin * float64(nodes[i].Prc) / 100 // в процентном соотношение на какую сумму берём кастомных монет
-				amnt_i64 := int64(math.Floor(amnt_f64))                 // в меньшую сторону
+				amnt_i64 := math.Floor(amnt_f64)                        // в меньшую сторону
 				if amnt_i64 <= 0 {
 					fmt.Println("ERROR: Value to Sell =0")
 					continue // переходим к другой записи мастернод
@@ -99,7 +87,7 @@ func delegate() {
 				sellDt := m.TxSellCoinData{
 					CoinToBuy:   nodes[i].Coin,
 					CoinToSell:  conf.CoinNet,
-					ValueToSell: amnt_i64,
+					ValueToSell: float32(amnt_i64),
 					GasCoin:     conf.CoinNet,
 					GasPrice:    1,
 				}
@@ -112,10 +100,10 @@ func delegate() {
 					fmt.Println("HASH TX:", resHash)
 				}
 
-				var valDeleg2 map[string]string
+				var valDeleg2 map[string]float32
 				valDeleg2 = sdk[iS].GetBalance(sdk[iS].AccAddress)
-				valDeleg2_f32 := cnvStr2Float_18(valDeleg2[nodes[i].Coin])
-				valDeleg2_i64 := int64(math.Floor(float64(valDeleg2_f32))) // в меньшую сторону
+				valDeleg2_f32 := valDeleg2[nodes[i].Coin]
+				valDeleg2_i64 := math.Floor(float64(valDeleg2_f32)) // в меньшую сторону
 				if valDeleg2_i64 <= 0 {
 					fmt.Println("ERROR: Delegate =0")
 					continue // переходим к другой записи мастернод
@@ -124,7 +112,7 @@ func delegate() {
 				delegDt := m.TxDelegateData{
 					Coin:     nodes[i].Coin,
 					PubKey:   nodes[i].PubKey,
-					Stake:    valDeleg2_i64,
+					Stake:    float32(valDeleg2_i64),
 					GasCoin:  conf.CoinNet,
 					GasPrice: 1,
 				}
