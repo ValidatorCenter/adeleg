@@ -13,10 +13,13 @@ import (
 	m "github.com/ValidatorCenter/minter-go-sdk"
 )
 
+const tagVaersion = "Validator.Center Autodelegate #0.8"
+
 var (
-	conf  Config
-	sdk   []m.SDK
-	nodes []NodeData
+	version string
+	conf    Config
+	sdk     []m.SDK
+	nodes   []NodeData
 )
 
 type Config struct {
@@ -69,6 +72,7 @@ func delegate() {
 					Coin:     conf.CoinNet,
 					PubKey:   nodes[i].PubKey,
 					Stake:    float32(amnt_f64),
+					Payload:  tagVaersion,
 					GasCoin:  conf.CoinNet,
 					GasPrice: 1,
 				}
@@ -94,6 +98,7 @@ func delegate() {
 					CoinToBuy:   nodes[i].Coin,
 					CoinToSell:  conf.CoinNet,
 					ValueToSell: float32(amnt_i64),
+					Payload:     tagVaersion,
 					GasCoin:     conf.CoinNet,
 					GasPrice:    1,
 				}
@@ -124,6 +129,7 @@ func delegate() {
 					Coin:     nodes[i].Coin,
 					PubKey:   nodes[i].PubKey,
 					Stake:    float32(valDeleg2_i64),
+					Payload:  tagVaersion,
 					GasCoin:  conf.CoinNet,
 					GasPrice: 1,
 				}
