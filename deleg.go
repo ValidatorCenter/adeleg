@@ -40,9 +40,15 @@ func getMinString(bigStr string) string {
 
 // делегирование
 func delegate() {
+	var err error
 	for iS, _ := range sdk {
 		var valueBuy map[string]float32
-		valueBuy = sdk[iS].GetBalance(sdk[iS].AccAddress)
+		valueBuy, _, err = sdk[iS].GetAddress(sdk[iS].AccAddress)
+		if err != nil {
+			fmt.Println("ERROR:", err.Error())
+			continue
+		}
+
 		valueBuy_f32 := valueBuy[conf.CoinNet]
 		fmt.Println("#################################")
 		fmt.Println("DELEGATE: ", valueBuy_f32)
@@ -101,7 +107,12 @@ func delegate() {
 				}
 
 				var valDeleg2 map[string]float32
-				valDeleg2 = sdk[iS].GetBalance(sdk[iS].AccAddress)
+				valDeleg2, _, err = sdk[iS].GetAddress(sdk[iS].AccAddress)
+				if err != nil {
+					fmt.Println("ERROR:", err.Error())
+					continue
+				}
+
 				valDeleg2_f32 := valDeleg2[nodes[i].Coin]
 				valDeleg2_i64 := math.Floor(float64(valDeleg2_f32)) // в меньшую сторону
 				if valDeleg2_i64 <= 0 {
