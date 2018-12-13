@@ -1,6 +1,6 @@
 Автоделегирование для блокчейна Minter
 ## Настройка
-``adlg.toml`` файл настройки автоделегатора в формате [Toml v0.5.0](https://github.com/mojombo/toml/blob/master/versions/en/toml-v0.5.0.md)
+``adlg.toml`` файл настройки автоделегатора в формате [Toml v0.5.0](https://github.com/mojombo/toml/blob/master/versions/en/toml-v0.5.0.md). Для изменения его в операционно системе Windows, лучше использовать редактор [Notepad++](https://notepad-plus-plus.org/download/).
 
 Можно указать при запуске другой файл конфигурации: ``adlg.exe adlg_2.toml``
 
