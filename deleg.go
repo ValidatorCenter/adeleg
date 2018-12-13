@@ -111,6 +111,9 @@ func delegate() {
 					fmt.Println("HASH TX:", resHash)
 				}
 
+				// SLEEP!
+				time.Sleep(time.Second * 10) // пауза 10сек, Nonce чтобы в блокчейна +1
+
 				var valDeleg2 map[string]float32
 				valDeleg2, _, err = sdk[iS].GetAddress(sdk[iS].AccAddress)
 				if err != nil {
@@ -144,7 +147,7 @@ func delegate() {
 				}
 			}
 			// SLEEP!
-			time.Sleep(time.Second * 2) // пауза 2сек, Nonce чтобы в блокчейна +1
+			time.Sleep(time.Second * 10) // пауза 10сек, Nonce чтобы в блокчейна +1
 		}
 	}
 }
