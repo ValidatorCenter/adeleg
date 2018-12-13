@@ -143,6 +143,8 @@ func delegate() {
 					fmt.Println("HASH TX:", resHash2)
 				}
 			}
+			// SLEEP!
+			time.Sleep(time.Second * 2) // пауза 2сек, Nonce чтобы в блокчейна +1
 		}
 	}
 }
