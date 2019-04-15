@@ -14,3 +14,5 @@ coin_net = "MNT"
 timeout = 10
 # Минимальная сумма делегирования
 min_amount = 100
+# Тип сети main или test
+chain = test

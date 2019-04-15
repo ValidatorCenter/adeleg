@@ -13,7 +13,7 @@ import (
 	m "github.com/ValidatorCenter/minter-go-sdk"
 )
 
-const tagVaersion = "Validator.Center Autodelegate #0.8"
+const tagVersion = "vc-adlg"
 
 var (
 	version string
@@ -29,6 +29,7 @@ type Config struct {
 	CoinNet   string          `toml:"coin_net"`
 	Timeout   int             `toml:"timeout"`
 	MinAmount int             `toml:"min_amount"`
+	ChainNet  string          `toml:"chain"`
 }
 
 type NodeData struct {
@@ -72,7 +73,7 @@ func delegate() {
 					Coin:     conf.CoinNet,
 					PubKey:   nodes[i].PubKey,
 					Stake:    float32(amnt_f64),
-					Payload:  tagVaersion,
+					Payload:  tagVersion,
 					GasCoin:  conf.CoinNet,
 					GasPrice: 1,
 				}
@@ -98,7 +99,7 @@ func delegate() {
 					CoinToBuy:   nodes[i].Coin,
 					CoinToSell:  conf.CoinNet,
 					ValueToSell: float32(amnt_i64),
-					Payload:     tagVaersion,
+					Payload:     tagVersion,
 					GasCoin:     conf.CoinNet,
 					GasPrice:    1,
 				}
@@ -132,7 +133,7 @@ func delegate() {
 					Coin:     nodes[i].Coin,
 					PubKey:   nodes[i].PubKey,
 					Stake:    float32(valDeleg2_i64),
-					Payload:  tagVaersion,
+					Payload:  tagVersion,
 					GasCoin:  conf.CoinNet,
 					GasPrice: 1,
 				}
@@ -168,6 +169,11 @@ func main() {
 		fmt.Println("...data from toml file = loaded!")
 	}
 
+	MainChain := false
+	if conf.ChainNet == "main" {
+		MainChain = true
+	}
+
 	for _, d := range conf.Accounts {
 		str0 := ""
 		str1 := ""
@@ -186,6 +192,7 @@ func main() {
 			MnAddress:     conf.Address,
 			AccAddress:    str0,
 			AccPrivateKey: str1,
+			ChainMainnet:  MainChain,
 		}
 		sdk = append(sdk, sdk1)
 	}
