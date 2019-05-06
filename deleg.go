@@ -30,6 +30,7 @@ type Config struct {
 	Timeout   int             `toml:"timeout"`
 	MinAmount int             `toml:"min_amount"`
 	ChainNet  string          `toml:"chain"`
+	MaxGas    int             `toml:"max_gas"`
 }
 
 type NodeData struct {
@@ -69,13 +70,20 @@ func delegate() {
 				// Страндартная монета BIP(MNT)
 				amnt_f64 := fullDelegCoin * float64(nodes[i].Prc) / 100 // в процентном соотношение
 
+				Gas, _ := sdk[iS].GetMinGas()
+				if Gas > int64(conf.MaxGas) {
+					// Если комиссия дофига, то ничего делать не будем
+					fmt.Println("Comission GAS >", conf.MaxGas)
+					continue
+				}
+
 				delegDt := m.TxDelegateData{
 					Coin:     conf.CoinNet,
 					PubKey:   nodes[i].PubKey,
 					Stake:    float32(amnt_f64),
 					Payload:  tagVersion,
 					GasCoin:  conf.CoinNet,
-					GasPrice: 1,
+					GasPrice: Gas,
 				}
 
 				fmt.Println("TX: ", getMinString(sdk[iS].AccAddress), fmt.Sprintf("%d%%", nodes[i].Prc), "=>", getMinString(nodes[i].PubKey), "=", int64(amnt_f64), conf.CoinNet)
@@ -95,13 +103,20 @@ func delegate() {
 					continue // переходим к другой записи мастернод
 				}
 
+				Gas, _ := sdk[iS].GetMinGas()
+				if Gas > int64(conf.MaxGas) {
+					// Если комиссия дофига, то ничего делать не будем
+					fmt.Println("Comission GAS >", conf.MaxGas)
+					continue
+				}
+
 				sellDt := m.TxSellCoinData{
 					CoinToBuy:   nodes[i].Coin,
 					CoinToSell:  conf.CoinNet,
 					ValueToSell: float32(amnt_i64),
 					Payload:     tagVersion,
 					GasCoin:     conf.CoinNet,
-					GasPrice:    1,
+					GasPrice:    Gas,
 				}
 				fmt.Println("TX: ", getMinString(sdk[iS].AccAddress), fmt.Sprintf("%d%s", int64(amnt_f64), conf.CoinNet), "=>", nodes[i].Coin)
 				resHash, err := sdk[iS].TxSellCoin(&sellDt)
@@ -129,13 +144,20 @@ func delegate() {
 					continue // переходим к другой записи мастернод
 				}
 
+				Gas, _ = sdk[iS].GetMinGas()
+				if Gas > int64(conf.MaxGas) {
+					// Если комиссия дофига, то ничего делать не будем
+					fmt.Println("Comission GAS >", conf.MaxGas)
+					continue
+				}
+
 				delegDt := m.TxDelegateData{
 					Coin:     nodes[i].Coin,
 					PubKey:   nodes[i].PubKey,
 					Stake:    float32(valDeleg2_i64),
 					Payload:  tagVersion,
 					GasCoin:  conf.CoinNet,
-					GasPrice: 1,
+					GasPrice: Gas,
 				}
 
 				fmt.Println("TX: ", getMinString(sdk[iS].AccAddress), fmt.Sprintf("%d%%", nodes[i].Prc), "=>", getMinString(nodes[i].PubKey), "=", valDeleg2_i64, nodes[i].Coin)
