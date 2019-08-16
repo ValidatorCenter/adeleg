@@ -1,0 +1,26 @@
+# copy to /etc/systemd/system/
+# sudo systemctl enable deleg
+# sudo systemctl start deleg
+
+[Unit]
+Description=VCDeleg
+After=syslog.target
+After=network.target
+
+[Service]
+Type=simple
+PIDFile=/opt/deleg/service.pid
+User=root
+Group=root
+WorkingDirectory=/opt/deleg
+ExecStart=/opt/deleg/adlg_lin64 /opt/deleg/adlg.toml &
+SyslogIdentifier=vcdeleg
+StandardOutput=syslog
+StandardError=syslog
+OOMScoreAdjust=-100
+TimeoutSec=10
+Restart=always
+LimitNOFILE=16384
+
+[Install]
+WantedBy=multi-user.target
