@@ -13,7 +13,7 @@ import (
 	m "github.com/ValidatorCenter/minter-go-sdk"
 )
 
-const tagVersion = "vc-adlg"
+const tagVersion = "adlg"
 
 var (
 	version string
@@ -127,6 +127,11 @@ func delegate() {
 					fmt.Println("HASH TX:", resHash)
 				}
 
+				if nodes[i].PubKey == "" {
+					// просто закупка монеты кастомной
+					continue // переходим к другой записи мастернод
+				}
+
 				// SLEEP!
 				time.Sleep(time.Second * 10) // пауза 10сек, Nonce чтобы в блокчейна +1
 
@@ -225,10 +230,6 @@ func main() {
 		coinX := ""
 		ok := true
 
-		if str0, ok = d[0].(string); !ok {
-			fmt.Println("ERROR: loading toml file:", d[0], "not a masternode public key")
-			return
-		}
 		if str1, ok = d[1].(string); !ok {
 			fmt.Println("ERROR: loading toml file:", d[1], "not a number")
 			return
@@ -240,6 +241,14 @@ func main() {
 				return
 			}
 			coinX = strings.ToUpper(coinX)
+		}
+
+		if str0, ok = d[0].(string); !ok {
+			if coinX == "" {
+				// нет пабликея и это не кастомная монета, значит - ошибка
+				fmt.Println("ERROR: loading toml file:", d[0], "not a masternode public key")
+				return
+			}
 		}
 
 		int1, err := strconv.Atoi(str1)

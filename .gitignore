@@ -1,0 +1,8 @@
+adlg_lin64
+adlg_mac
+adlg_mac64
+*.exe
+
+# System Files
+.DS_Store
+Thumbs.db
