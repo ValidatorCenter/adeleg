@@ -25,7 +25,7 @@ var (
 type Config struct {
 	Address   string          `toml:"address"`
 	Nodes     [][]interface{} `toml:"nodes"`
-	Accounts  [][]interface{} `toml:"accounts"`
+	Accounts  []interface{}   `toml:"accounts"`
 	CoinNet   string          `toml:"-"`
 	Timeout   int             `toml:"timeout"`
 	MinAmount int             `toml:"min_amount"`
@@ -204,23 +204,18 @@ func main() {
 	}
 
 	for _, d := range conf.Accounts {
-		str0 := ""
-		str1 := ""
-		ok := true
+		priv := d.(string)
 
-		if str0, ok = d[0].(string); !ok {
-			fmt.Println("ERROR: loading toml file:", d[0], "not wallet address")
-			return
-		}
-		if str1, ok = d[1].(string); !ok {
-			fmt.Println("ERROR: loading toml file:", d[1], "not private wallet key")
+		pblck, err := m.GetAddressPrivateKey(priv)
+		if err != nil {
+			fmt.Println("ERROR: convert PrivKey: ", err.Error())
 			return
 		}
 
 		sdk1 := m.SDK{
 			MnAddress:     conf.Address,
-			AccAddress:    str0,
-			AccPrivateKey: str1,
+			AccAddress:    pblck,
+			AccPrivateKey: priv,
 			ChainMainnet:  MainChain,
 		}
 		sdk = append(sdk, sdk1)
