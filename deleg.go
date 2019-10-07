@@ -26,7 +26,7 @@ type Config struct {
 	Address   string          `toml:"address"`
 	Nodes     [][]interface{} `toml:"nodes"`
 	Accounts  [][]interface{} `toml:"accounts"`
-	CoinNet   string          `toml:"coin_net"`
+	CoinNet   string          `toml:"-"`
 	Timeout   int             `toml:"timeout"`
 	MinAmount int             `toml:"min_amount"`
 	ChainNet  string          `toml:"chain"`
@@ -197,8 +197,10 @@ func main() {
 	}
 
 	MainChain := false
+	conf.CoinNet = "MNT"
 	if conf.ChainNet == "main" {
 		MainChain = true
+		conf.CoinNet = "BIP"
 	}
 
 	for _, d := range conf.Accounts {
