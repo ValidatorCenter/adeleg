@@ -13,7 +13,8 @@ import (
 	m "github.com/ValidatorCenter/minter-go-sdk"
 )
 
-const tagVersion = "Vc"
+const tagVersion = ""
+const PRC100 = 100 // 100%
 
 var (
 	version string
@@ -330,6 +331,20 @@ func main() {
 			Coin:   coinX,
 		}
 		nodes = append(nodes, n1)
+	}
+
+	// Проверка на 100%
+	for iA, _ := range accs {
+		countPrc := 0
+		for iN, _ := range nodes {
+			if accs[iA].Rule == nodes[iN].Rule {
+				countPrc += nodes[iN].Prc
+			}
+		}
+		if countPrc > PRC100 {
+			fmt.Println("ERROR: amount of PRC in rule:", accs[iA].Rule, " >100%")
+			return
+		}
 	}
 
 	for { // бесконечный цикл
