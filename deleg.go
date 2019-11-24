@@ -59,6 +59,12 @@ func getMinString(bigStr string) string {
 
 // делегирование
 func delegate() {
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("Delegate recovered after err: ", r)
+		}
+	}()
+
 	var err error
 	for iS, _ := range accs {
 		var valueBuy map[string]float32
