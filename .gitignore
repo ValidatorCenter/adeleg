@@ -6,3 +6,6 @@ adlg_mac64
 # System Files
 .DS_Store
 Thumbs.db
+
+### IntelliJ IDEA ###
+.idea
